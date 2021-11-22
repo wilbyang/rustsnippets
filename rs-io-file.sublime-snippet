@@ -1,0 +1,9 @@
+
+<snippet>
+    <content><![CDATA[
+https://github.com/rust-in-action/code/blob/1st-edition/ch7/ch7-actionkv/src/lib.rs
+]]></content>
+    <!-- Optional: Set a tabTrigger to define how to trigger the snippet -->
+    <tabTrigger>rsiofile</tabTrigger>
+    
+</snippet>
