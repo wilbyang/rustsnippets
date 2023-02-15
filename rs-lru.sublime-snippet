@@ -1,0 +1,51 @@
+
+<snippet>
+    <content><![CDATA[
+use std::collections::{HashMap, VecDeque};
+
+struct LRUCache<K, V> {
+    cache: HashMap<K, V>,
+    lru: VecDeque<K>,
+    capacity: usize,
+}
+
+impl<K, V> LRUCache<K, V>
+where
+    K: std::cmp::Eq + std::hash::Hash + Clone,
+{
+    fn new(capacity: usize) -> LRUCache<K, V> {
+        LRUCache {
+            cache: HashMap::new(),
+            lru: VecDeque::new(),
+            capacity,
+        }
+    }
+
+    fn get(&mut self, key: &K) -> Option<&V> {
+        if let Some(value) = self.cache.get(key) {
+            self.lru.retain(|k| k != key);
+            self.lru.push_front(key.clone());
+            Some(value)
+        } else {
+            None
+        }
+    }
+
+    fn put(&mut self, key: K, value: V) {
+        if self.cache.len() == self.capacity && !self.cache.contains_key(&key) {
+            if let Some(k) = self.lru.pop_back() {
+                self.cache.remove(&k);
+            }
+        }
+        self.cache.insert(key.clone(), value);
+        self.lru.retain(|k| k != &key);
+        self.lru.push_front(key);
+    }
+}
+
+]]></content>
+    <!-- Optional: Set a tabTrigger to define how to trigger the snippet -->
+    <tabTrigger>rslru</tabTrigger>
+    <scope>source.rust</scope>
+    
+</snippet>

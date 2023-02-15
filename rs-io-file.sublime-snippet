@@ -210,5 +210,5 @@ impl ActionKV {
 ]]></content>
     <!-- Optional: Set a tabTrigger to define how to trigger the snippet -->
     <tabTrigger>rsiofile</tabTrigger>
-    
+    <scope>source.rust</scope>
 </snippet>
