@@ -91,7 +91,7 @@ fn blake3_base_hash(data: &[u8]) -> Hasher {
 }
 ]]></content>
     <!-- Optional: Set a tabTrigger to define how to trigger the snippet -->
-    <tabTrigger>rs-tokio-queue</tabTrigger>
+    <tabTrigger>rs-pow-tokio</tabTrigger>
     <scope>source.rust</scope>
     
 </snippet>
