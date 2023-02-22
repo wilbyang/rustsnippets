@@ -1,0 +1,80 @@
+<snippet>
+    <content><![CDATA[
+#include <iostream>
+#include <vector>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <functional>
+#include <queue>
+#include <utility>
+
+class ThreadPool {
+public:
+    ThreadPool(size_t numThreads) : stop(false) {
+        for (size_t i = 0; i < numThreads; ++i)
+            workers.emplace_back(
+                [this] {
+                    for (;;) {
+                        std::function<void()> task;
+                        {
+                            std::unique_lock<std::mutex> lock(this->queue_mutex);
+                            this->condition.wait(lock,
+                                [this] { return this->stop || !this->tasks.empty(); });
+                            if (this->stop && this->tasks.empty())
+                                return;
+                            task = std::move(this->tasks.front());
+                            this->tasks.pop();
+                        }
+                        task();
+                    }
+                }
+            );
+    }
+
+    template<class F, class... Args>
+    void enqueue(F&& f, Args&&... args) {
+        {
+            std::unique_lock<std::mutex> lock(queue_mutex);
+            tasks.emplace([&args..., &f] { std::forward<F>(f)(std::forward<Args>(args)...); });
+        }
+        condition.notify_one();
+    }
+
+    ~ThreadPool() {
+        {
+            std::unique_lock<std::mutex> lock(queue_mutex);
+            stop = true;
+        }
+        condition.notify_all();
+        for (std::thread& worker : workers)
+            worker.join();
+    }
+
+private:
+    std::vector<std::thread> workers;
+    std::queue<std::function<void()>> tasks;
+
+    std::mutex queue_mutex;
+    std::condition_variable condition;
+    bool stop;
+};
+
+int main() {
+    const int numThreads = 4;
+    ThreadPool pool(numThreads);
+    for (int i = 0; i < 10; ++i) {
+        pool.enqueue([]() {
+            std::cout << "Hello, world!" << std::endl;
+        });
+    }
+    return 0;
+}
+
+
+]]></content>
+    <!-- Optional: Set a tabTrigger to define how to trigger the snippet -->
+    <tabTrigger>cppthreadpool</tabTrigger>
+    <scope>source.c++</scope>
+    
+</snippet>
