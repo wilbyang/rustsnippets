@@ -169,6 +169,6 @@ impl Crawler {
 }
 ]]></content>
     <!-- Optional: Set a tabTrigger to define how to trigger the snippet -->
-    <tabTrigger>rsactor</tabTrigger>
+    <tabTrigger>rs-crawler-mpsc</tabTrigger>
     
 </snippet>
