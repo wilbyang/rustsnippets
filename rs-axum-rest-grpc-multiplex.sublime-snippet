@@ -11,20 +11,21 @@ publish = false
 axum = { path = "../../axum" }
 futures = "0.3"
 hyper = { version = "0.14", features = ["full"] }
-prost = "0.10"
+prost = "0.11"
 tokio = { version = "1", features = ["full"] }
-tonic = { version = "0.7" }
+tonic = { version = "0.9" }
+tonic-reflection = "0.9"
 tower = { version = "0.4", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [build-dependencies]
-tonic-build = { version = "0.7", features = ["prost"] }
+tonic-build = { version = "0.9", features = ["prost"] }
 
 //! Run with
 //!
 //! ```not_rust
-//! cd examples && cargo run -p example-rest-grpc-multiplex
+//! cargo run -p example-rest-grpc-multiplex
 //! ```
 
 use self::multiplex_service::MultiplexService;
@@ -41,6 +42,9 @@ mod multiplex_service;
 
 mod proto {
     tonic::include_proto!("helloworld");
+
+    pub(crate) const FILE_DESCRIPTOR_SET: &[u8] =
+        tonic::include_file_descriptor_set!("helloworld_descriptor");
 }
 
 #[derive(Default)]
@@ -70,10 +74,10 @@ async fn web_root() -> &'static str {
 async fn main() {
     // initialize tracing
     tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::new(
-            std::env::var("RUST_LOG")
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "example_rest_grpc_multiplex=debug".into()),
-        ))
+        )
         .with(tracing_subscriber::fmt::layer())
         .init();
 
@@ -81,14 +85,21 @@ async fn main() {
     let rest = Router::new().route("/", get(web_root));
 
     // build the grpc service
-    let grpc = GreeterServer::new(GrpcServiceImpl::default());
+    let reflection_service = tonic_reflection::server::Builder::configure()
+        .register_encoded_file_descriptor_set(proto::FILE_DESCRIPTOR_SET)
+        .build()
+        .unwrap();
+    let grpc = tonic::transport::Server::builder()
+        .add_service(reflection_service)
+        .add_service(GreeterServer::new(GrpcServiceImpl::default()))
+        .into_service();
 
     // combine them into one service
     let service = MultiplexService::new(rest, grpc);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     tracing::debug!("listening on {}", addr);
-    axum::Server::bind(&addr)
+    hyper::Server::bind(&addr)
         .serve(tower::make::Shared::new(service))
         .await
         .unwrap();

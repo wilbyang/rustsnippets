@@ -9,8 +9,8 @@ publish = false
 
 [dependencies]
 async-session = "3.0.0"
-axum = { path = "../../axum", features = ["headers"] }
-headers = "0.3"
+axum = { path = "../../axum" }
+axum-extra = { path = "../../axum-extra", features = ["typed-header"] }
 http = "0.2"
 oauth2 = "4.1"
 # Use Rustls because it makes it easier to cross-compile on CI
@@ -33,22 +33,20 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 use async_session::{MemoryStore, Session, SessionStore};
 use axum::{
     async_trait,
-    extract::{
-        rejection::TypedHeaderRejectionReason, Extension, FromRequest, Query, RequestParts,
-        TypedHeader,
-    },
+    extract::{FromRef, FromRequestParts, Query, State},
     http::{header::SET_COOKIE, HeaderMap},
     response::{IntoResponse, Redirect, Response},
     routing::get,
-    Router,
+    RequestPartsExt, Router,
 };
-use http::header;
+use axum_extra::{headers, typed_header::TypedHeaderRejectionReason, TypedHeader};
+use http::{header, request::Parts};
 use oauth2::{
     basic::BasicClient, reqwest::async_http_client, AuthUrl, AuthorizationCode, ClientId,
     ClientSecret, CsrfToken, RedirectUrl, Scope, TokenResponse, TokenUrl,
 };
 use serde::{Deserialize, Serialize};
-use std::{env, net::SocketAddr};
+use std::env;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 static COOKIE_NAME: &str = "SESSION";
@@ -56,16 +54,20 @@ static COOKIE_NAME: &str = "SESSION";
 #[tokio::main]
 async fn main() {
     tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::new(
-            std::env::var("RUST_LOG").unwrap_or_else(|_| "example_oauth=debug".into()),
-        ))
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "example_oauth=debug".into()),
+        )
         .with(tracing_subscriber::fmt::layer())
         .init();
 
     // `MemoryStore` is just used as an example. Don't use this in production.
     let store = MemoryStore::new();
-
     let oauth_client = oauth_client();
+    let app_state = AppState {
+        store,
+        oauth_client,
+    };
 
     let app = Router::new()
         .route("/", get(index))
@@ -73,16 +75,31 @@ async fn main() {
         .route("/auth/authorized", get(login_authorized))
         .route("/protected", get(protected))
         .route("/logout", get(logout))
-        .layer(Extension(store))
-        .layer(Extension(oauth_client));
+        .with_state(app_state);
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-    tracing::debug!("listening on {}", addr);
-
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
         .await
         .unwrap();
+    tracing::debug!("listening on {}", listener.local_addr().unwrap());
+    axum::serve(listener, app).await.unwrap();
+}
+
+#[derive(Clone)]
+struct AppState {
+    store: MemoryStore,
+    oauth_client: BasicClient,
+}
+
+impl FromRef<AppState> for MemoryStore {
+    fn from_ref(state: &AppState) -> Self {
+        state.store.clone()
+    }
+}
+
+impl FromRef<AppState> for BasicClient {
+    fn from_ref(state: &AppState) -> Self {
+        state.oauth_client.clone()
+    }
 }
 
 fn oauth_client() -> BasicClient {
@@ -135,14 +152,14 @@ async fn index(user: Option<User>) -> impl IntoResponse {
     }
 }
 
-async fn discord_auth(Extension(client): Extension<BasicClient>) -> impl IntoResponse {
+async fn discord_auth(State(client): State<BasicClient>) -> impl IntoResponse {
     let (auth_url, _csrf_token) = client
         .authorize_url(CsrfToken::new_random)
         .add_scope(Scope::new("identify".to_string()))
         .url();
 
     // Redirect to Discord's oauth service
-    Redirect::to(&auth_url.to_string())
+    Redirect::to(auth_url.as_ref())
 }
 
 // Valid user session required. If there is none, redirect to the auth page
@@ -154,7 +171,7 @@ async fn protected(user: User) -> impl IntoResponse {
 }
 
 async fn logout(
-    Extension(store): Extension<MemoryStore>,
+    State(store): State<MemoryStore>,
     TypedHeader(cookies): TypedHeader<headers::Cookie>,
 ) -> impl IntoResponse {
     let cookie = cookies.get(COOKIE_NAME).unwrap();
@@ -178,8 +195,8 @@ struct AuthRequest {
 
 async fn login_authorized(
     Query(query): Query<AuthRequest>,
-    Extension(store): Extension<MemoryStore>,
-    Extension(oauth_client): Extension<BasicClient>,
+    State(store): State<MemoryStore>,
+    State(oauth_client): State<BasicClient>,
 ) -> impl IntoResponse {
     // Get an auth token
     let token = oauth_client
@@ -227,19 +244,19 @@ impl IntoResponse for AuthRedirect {
 }
 
 #[async_trait]
-impl<B> FromRequest<B> for User
+impl<S> FromRequestParts<S> for User
 where
-    B: Send,
+    MemoryStore: FromRef<S>,
+    S: Send + Sync,
 {
     // If anything goes wrong or no session is found, redirect to the auth page
     type Rejection = AuthRedirect;
 
-    async fn from_request(req: &mut RequestParts<B>) -> Result<Self, Self::Rejection> {
-        let Extension(store) = Extension::<MemoryStore>::from_request(req)
-            .await
-            .expect("`MemoryStore` extension is missing");
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let store = MemoryStore::from_ref(state);
 
-        let cookies = TypedHeader::<headers::Cookie>::from_request(req)
+        let cookies = parts
+            .extract::<TypedHeader<headers::Cookie>>()
             .await
             .map_err(|e| match *e.name() {
                 header::COOKIE => match e.reason() {

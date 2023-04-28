@@ -17,12 +17,12 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 //! Run with
 //!
 //! ```not_rust
-//! cd examples && cargo run -p example-tls-rustls
+//! cargo run -p example-tls-rustls
 //! ```
 
 use axum::{
     extract::Host,
-    handler::Handler,
+    handler::HandlerWithoutStateExt,
     http::{StatusCode, Uri},
     response::Redirect,
     routing::get,
@@ -41,9 +41,10 @@ struct Ports {
 #[tokio::main]
 async fn main() {
     tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::new(
-            std::env::var("RUST_LOG").unwrap_or_else(|_| "example_tls_rustls=debug".into()),
-        ))
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "example_tls_rustls=debug".into()),
+        )
         .with(tracing_subscriber::fmt::layer())
         .init();
 
@@ -108,10 +109,9 @@ async fn redirect_http_to_https(ports: Ports) {
     };
 
     let addr = SocketAddr::from(([127, 0, 0, 1], ports.http));
-    tracing::debug!("http redirect listening on {}", addr);
-
-    axum::Server::bind(&addr)
-        .serve(redirect.into_make_service())
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    tracing::debug!("listening on {}", listener.local_addr().unwrap());
+    axum::serve(listener, redirect.into_make_service())
         .await
         .unwrap();
 }

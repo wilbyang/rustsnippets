@@ -12,7 +12,7 @@ axum = { path = "../../axum" }
 serde = { version = "1.0", features = ["derive"] }
 tokio = { version = "1.0", features = ["full"] }
 tower = { version = "0.4", features = ["util", "timeout"] }
-tower-http = { version = "0.3.0", features = ["add-extension", "trace"] }
+tower-http = { version = "0.4.0", features = ["add-extension", "trace"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1.0", features = ["serde", "v4"] }
@@ -29,12 +29,12 @@ uuid = { version = "1.0", features = ["serde", "v4"] }
 //! Run with
 //!
 //! ```not_rust
-//! cd examples && cargo run -p example-todos
+//! cargo run -p example-todos
 //! ```
 
 use axum::{
     error_handling::HandleErrorLayer,
-    extract::{Extension, Path, Query},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{get, patch},
@@ -43,7 +43,6 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
-    net::SocketAddr,
     sync::{Arc, RwLock},
     time::Duration,
 };
@@ -55,10 +54,10 @@ use uuid::Uuid;
 #[tokio::main]
 async fn main() {
     tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::new(
-            std::env::var("RUST_LOG")
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "example_todos=debug,tower_http=debug".into()),
-        ))
+        )
         .with(tracing_subscriber::fmt::layer())
         .init();
 
@@ -83,16 +82,15 @@ async fn main() {
                 }))
                 .timeout(Duration::from_secs(10))
                 .layer(TraceLayer::new_for_http())
-                .layer(Extension(db))
                 .into_inner(),
-        );
+        )
+        .with_state(db);
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-    tracing::debug!("listening on {}", addr);
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
         .await
         .unwrap();
+    tracing::debug!("listening on {}", listener.local_addr().unwrap());
+    axum::serve(listener, app).await.unwrap();
 }
 
 // The query parameters for todos index
@@ -104,7 +102,7 @@ pub struct Pagination {
 
 async fn todos_index(
     pagination: Option<Query<Pagination>>,
-    Extension(db): Extension<Db>,
+    State(db): State<Db>,
 ) -> impl IntoResponse {
     let todos = db.read().unwrap();
 
@@ -125,10 +123,7 @@ struct CreateTodo {
     text: String,
 }
 
-async fn todos_create(
-    Json(input): Json<CreateTodo>,
-    Extension(db): Extension<Db>,
-) -> impl IntoResponse {
+async fn todos_create(State(db): State<Db>, Json(input): Json<CreateTodo>) -> impl IntoResponse {
     let todo = Todo {
         id: Uuid::new_v4(),
         text: input.text,
@@ -148,8 +143,8 @@ struct UpdateTodo {
 
 async fn todos_update(
     Path(id): Path<Uuid>,
+    State(db): State<Db>,
     Json(input): Json<UpdateTodo>,
-    Extension(db): Extension<Db>,
 ) -> Result<impl IntoResponse, StatusCode> {
     let mut todo = db
         .read()
@@ -171,7 +166,7 @@ async fn todos_update(
     Ok(Json(todo))
 }
 
-async fn todos_delete(Path(id): Path<Uuid>, Extension(db): Extension<Db>) -> impl IntoResponse {
+async fn todos_delete(Path(id): Path<Uuid>, State(db): State<Db>) -> impl IntoResponse {
     if db.write().unwrap().remove(&id).is_some() {
         StatusCode::NO_CONTENT
     } else {

@@ -9,12 +9,13 @@ publish = false
 
 [dependencies]
 axum = { path = "../../axum" }
+hyper = { version = "0.14", features = ["full"] }
 tokio = { version = "1.0", features = ["full"] }
 
 //! Run with
 //!
 //! ```not_rust
-//! cd examples && cargo run -p example-graceful-shutdown
+//! cargo run -p example-graceful-shutdown
 //! kill or ctrl-c
 //! ```
 
@@ -30,7 +31,7 @@ async fn main() {
     // run it
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     println!("listening on {}", addr);
-    axum::Server::bind(&addr)
+    hyper::Server::bind(&addr)
         .serve(app.into_make_service())
         .with_graceful_shutdown(shutdown_signal())
         .await

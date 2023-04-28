@@ -19,7 +19,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 //! Run with
 //!
 //! ```not_rust
-//! cd examples && cargo run -p example-unix-domain-socket
+//! cargo run -p example-unix-domain-socket
 //! ```
 
 #[cfg(unix)]
@@ -63,9 +63,10 @@ mod unix {
 
     pub async fn server() {
         tracing_subscriber::registry()
-            .with(tracing_subscriber::EnvFilter::new(
-                std::env::var("RUST_LOG").unwrap_or_else(|_| "debug".into()),
-            ))
+            .with(
+                tracing_subscriber::EnvFilter::try_from_default_env()
+                    .unwrap_or_else(|_| "debug".into()),
+            )
             .with(tracing_subscriber::fmt::layer())
             .init();
 
@@ -80,7 +81,7 @@ mod unix {
         tokio::spawn(async {
             let app = Router::new().route("/", get(handler));
 
-            axum::Server::builder(ServerAccept { uds })
+            hyper::Server::builder(ServerAccept { uds })
                 .serve(app.into_make_service_with_connect_info::<UdsConnectInfo>())
                 .await
                 .unwrap();

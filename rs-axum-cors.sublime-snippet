@@ -10,12 +10,12 @@ publish = false
 [dependencies]
 axum = { path = "../../axum" }
 tokio = { version = "1.0", features = ["full"] }
-tower-http = { version = "0.3.0", features = ["cors"] }
+tower-http = { version = "0.4.0", features = ["cors"] }
 
 //! Run with
 //!
 //! ```not_rust
-//! cd examples && cargo run -p example-cors
+//! cargo run -p example-cors
 //! ```
 
 use axum::{
@@ -54,10 +54,8 @@ async fn main() {
 
 async fn serve(app: Router, port: u16) {
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    axum::serve(listener, app).await.unwrap();
 }
 
 async fn html() -> impl IntoResponse {

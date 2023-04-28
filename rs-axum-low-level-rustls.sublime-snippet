@@ -9,7 +9,7 @@ publish = false
 
 [dependencies]
 axum = { path = "../../axum" }
-futures-util = "0.3"
+futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
 hyper = { version = "0.14", features = ["full"] }
 rustls-pemfile = "0.3"
 tokio = { version = "1", features = ["full"] }
@@ -21,10 +21,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 //! Run with
 //!
 //! ```not_rust
-//! cd examples && cargo run -p example-low-level-rustls
+//! cargo run -p example-low-level-rustls
 //! ```
 
-use axum::{extract::ConnectInfo, routing::get, Router};
+use axum::{extract::Request, routing::get, Router};
 use futures_util::future::poll_fn;
 use hyper::server::{
     accept::Accept,
@@ -34,7 +34,6 @@ use rustls_pemfile::{certs, pkcs8_private_keys};
 use std::{
     fs::File,
     io::BufReader,
-    net::SocketAddr,
     path::{Path, PathBuf},
     pin::Pin,
     sync::Arc,
@@ -44,15 +43,16 @@ use tokio_rustls::{
     rustls::{Certificate, PrivateKey, ServerConfig},
     TlsAcceptor,
 };
-use tower::MakeService;
+use tower::make::MakeService;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() {
     tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::new(
-            std::env::var("RUST_LOG").unwrap_or_else(|_| "example_tls_rustls=debug".into()),
-        ))
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "example_tls_rustls=debug".into()),
+        )
         .with(tracing_subscriber::fmt::layer())
         .init();
 
@@ -72,9 +72,9 @@ async fn main() {
 
     let protocol = Arc::new(Http::new());
 
-    let mut app = Router::new()
+    let mut app = Router::<()>::new()
         .route("/", get(handler))
-        .into_make_service_with_connect_info::<SocketAddr>();
+        .into_make_service();
 
     loop {
         let stream = poll_fn(|cx| Pin::new(&mut listener).poll_accept(cx))
@@ -86,7 +86,7 @@ async fn main() {
 
         let protocol = protocol.clone();
 
-        let svc = app.make_service(&stream);
+        let svc = MakeService::<_, Request<hyper::Body>>::make_service(&mut app, &stream);
 
         tokio::spawn(async move {
             if let Ok(stream) = acceptor.accept(stream).await {
@@ -96,8 +96,8 @@ async fn main() {
     }
 }
 
-async fn handler(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> String {
-    addr.to_string()
+async fn handler() -> &'static str {
+    "Hello, World!"
 }
 
 fn rustls_server_config(key: impl AsRef<Path>, cert: impl AsRef<Path>) -> Arc<ServerConfig> {
