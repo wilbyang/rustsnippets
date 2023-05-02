@@ -1,0 +1,23 @@
+<snippet>
+    <content><![CDATA[
+// https://dev.to/kgrech/6-things-you-can-do-with-the-cow-in-rust-4l55
+use std::borrow::Cow;
+
+fn remove_whitespaces(s: &str) -> Cow<str> {
+    if s.contains(' ') {
+        Cow::Owned(s.to_string().replace(' ', ""))
+    } else {
+        Cow::Borrowed(s)
+    }
+}
+
+fn main() {
+    let value = remove_whitespaces("Hello world!");
+    println!("{}", value);
+}
+]]></content>
+	<!-- Optional: Set a tabTrigger to define how to trigger the snippet -->
+	<tabTrigger>rscow</tabTrigger>
+	<!-- Optional: Set a scope to limit where the snippet will trigger -->
+	<scope>source.rust</scope>
+</snippet>
