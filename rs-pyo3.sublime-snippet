@@ -58,6 +58,37 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("query", query)?;
     Ok(())
 }
+--- python *args and **kwargs
+
+use pyo3::types::{PyDict, PyTuple};
+
+#[pyclass]
+struct MyClass {}
+
+#[pymethods]
+impl MyClass {
+    #[staticmethod]
+    #[args(kwargs = "**")]
+    fn test1(kwargs: Option<&PyDict>) -> PyResult<()> {
+        if let Some(kwargs) = kwargs {
+            for kwarg in kwargs {
+                println!("{:?}", kwarg);
+            }
+        } else {
+            println!("kwargs is none");
+        }
+        Ok(())
+    }
+
+    #[staticmethod]
+    #[args(args = "*")]
+    fn test2(args: &PyTuple) -> PyResult<()> {
+        for arg in args {
+            println!("{:?}", arg);
+        }
+        Ok(())
+    }
+}
 
 ]]></content>
     <!-- Optional: Set a tabTrigger to define how to trigger the snippet -->
