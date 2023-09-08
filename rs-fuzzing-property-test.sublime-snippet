@@ -1,0 +1,104 @@
+<snippet>
+    <content><![CDATA[
+--- fuzz vs property test
+https://www.tedinski.com/2018/12/11/fuzzing-and-property-testing.html
+
+--- fuzz cargo setup
+[package]
+authors = ["Automatically generated"]
+edition = "2018"
+name = "fuzzme-fuzz"
+publish = false
+version = "0.0.0"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+arbitrary = {version = "1", features = ["derive"]}
+libfuzzer-sys = "0.4"
+
+[dependencies.fuzzme]
+path = ".."
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[[bin]]
+doc = false
+name = "fuzz_target_1"
+path = "fuzz_targets/fuzz_target_1.rs"
+test = false
+
+--- dirs levels
+
+fuzzme
+    fuzz
+        cargo.toml
+        fuzz_targets
+            fuzz_target_1.rs
+--- codes
+#![no_main]
+use arbitrary::Arbitrary;
+use libfuzzer_sys::fuzz_target;
+
+#[derive(Arbitrary, Debug)]
+struct Input {
+    s: String,
+}
+
+fuzz_target!(|input: Input| {
+    use fuzzme::parse_integer;
+
+    parse_integer(&input.s);
+});
+
+
+
+
+
+---prop test
+[dev-dependencies]
+proptest = "1.0.0"
+
+
+use proptest::prelude::*;
+proptest! {
+    #[test]
+    fn test_quicksort_proptest(vec in prop::collection::vec(prop::num::i64::ANY, 0..1000)) {
+        use quicksort_proptest::Quicksort;
+
+        let mut vec_sorted = vec.clone();
+        vec_sorted.sort();
+
+        let mut vec_quicksorted = vec.clone();
+        vec_quicksorted.quicksort();
+
+        assert_eq!(vec_quicksorted, vec_sorted);
+    }
+}
+
+pub fn add<T: std::ops::Add<Output = T>>(a: T, b: T) -> T {
+    a + b
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proptest::prelude::*;
+    proptest! {
+        #[test]
+        fn test_add(a: i64, b: i64) {
+            assert_eq!(add(a, b), a+b);
+        }
+    }
+}
+
+
+]]></content>
+	<!-- Optional: Set a tabTrigger to define how to trigger the snippet -->
+	<tabTrigger>rstrait</tabTrigger>
+	<!-- Optional: Set a scope to limit where the snippet will trigger -->
+	<scope>source.rust</scope>
+</snippet>
