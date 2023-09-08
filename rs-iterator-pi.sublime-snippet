@@ -44,6 +44,8 @@ impl Point {
         self.0 * self.0 + self.1 * self.1 <= 1.0
     }
 }
+--- float partical equal
+let result = a.partial_cmp(&b).unwrap_or(Ordering::Equal);
 ]]></content>
     <!-- Optional: Set a tabTrigger to define how to trigger the snippet -->
     <tabTrigger>rs-interator-pi</tabTrigger>
