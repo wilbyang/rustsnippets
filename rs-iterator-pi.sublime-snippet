@@ -46,7 +46,7 @@ impl Point {
 }
 ]]></content>
     <!-- Optional: Set a tabTrigger to define how to trigger the snippet -->
-    <tabTrigger>rs-axum-chat</tabTrigger>
+    <tabTrigger>rs-interator-pi</tabTrigger>
     <scope>source.rust</scope>
     
 </snippet>
