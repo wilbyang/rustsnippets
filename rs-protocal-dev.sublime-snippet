@@ -1,6 +1,153 @@
 
 <snippet>
     <content><![CDATA[
+
+---pb abi
+syntax = "proto3";
+
+package abi;
+
+// 来自客户端的命令请求
+message CommandRequest {
+  oneof request_data {
+    Hget hget = 1;
+    Hgetall hgetall = 2;
+    Hmget hmget = 3;
+    Hset hset = 4;
+    Hmset hmset = 5;
+    Hdel hdel = 6;
+    Hmdel hmdel = 7;
+    Hexist hexist = 8;
+    Hmexist hmexist = 9;
+  }
+}
+
+// 服务器的响应
+message CommandResponse {
+  // 状态码；复用 HTTP 2xx/4xx/5xx 状态码
+  uint32 status = 1;
+  // 如果不是 2xx，message 里包含详细的信息
+  string message = 2;
+  // 成功返回的 values
+  repeated Value values = 3;
+  // 成功返回的 kv pairs
+  repeated Kvpair pairs = 4;
+}
+
+// 从 table 中获取一个 key，返回 value
+message Hget {
+  string table = 1;
+  string key = 2;
+}
+
+// 从 table 中获取所有的 Kvpair
+message Hgetall { string table = 1; }
+
+// 从 table 中获取一组 key，返回它们的 value
+message Hmget {
+  string table = 1;
+  repeated string keys = 2;
+}
+
+// 返回的值
+message Value {
+  oneof value {
+    string string = 1;
+    bytes binary = 2;
+    int64 integer = 3;
+    double float = 4;
+    bool bool = 5;
+  }
+}
+
+// 返回的 kvpair
+message Kvpair {
+  string key = 1;
+  Value value = 2;
+}
+
+// 往 table 里存一个 kvpair，
+// 如果 table 不存在就创建这个 table
+message Hset {
+  string table = 1;
+  Kvpair pair = 2;
+}
+
+// 往 table 中存一组 kvpair，
+// 如果 table 不存在就创建这个 table
+message Hmset {
+  string table = 1;
+  repeated Kvpair pairs = 2;
+}
+
+// 从 table 中删除一个 key，返回它之前的值
+message Hdel {
+  string table = 1;
+  string key = 2;
+}
+
+// 从 table 中删除一组 key，返回它们之前的值
+message Hmdel {
+  string table = 1;
+  repeated string keys = 2;
+}
+
+// 查看 key 是否存在
+message Hexist {
+  string table = 1;
+  string key = 2;
+}
+
+// 查看一组 key 是否存在
+message Hmexist {
+  string table = 1;
+  repeated string keys = 2;
+}
+
+---build.rs pb
+fn main() {
+    let mut config = prost_build::Config::new();
+    config.bytes(&["."]);
+    config.type_attribute(".", "#[derive(PartialOrd)]");
+    config
+        .out_dir("src/pb")
+        .compile_protos(&["abi.proto"], &["."])
+        .unwrap();
+
+    println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=abi.proto");
+}
+
+---err def
+use crate::Value;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum KvError {
+    #[error("Not found for table: {0}, key: {1}")]
+    NotFound(String, String),
+    #[error("Frame is larger than max size")]
+    FrameError,
+    #[error("Command is invalid: `{0}`")]
+    InvalidCommand(String),
+    #[error("Cannot convert value {:0} to {1}")]
+    ConvertError(Value, &'static str),
+    #[error("Cannot process command {0} with table: {1}, key: {2}. Error: {}")]
+    StorageError(&'static str, String, String, String),
+
+    #[error("Failed to encode protobuf message")]
+    EncodeError(#[from] prost::EncodeError),
+    #[error("Failed to decode protobuf message")]
+    DecodeError(#[from] prost::DecodeError),
+    #[error("Failed to access sled db")]
+    SledError(#[from] sled::Error),
+    #[error("I/O error")]
+    IoError(#[from] std::io::Error),
+
+    #[error("Internal error: {0}")]
+    Internal(String),
+}
+---protocal
 use std::io::{Read, Write};
 
 use crate::{CommandRequest, CommandResponse, KvError};
@@ -209,6 +356,27 @@ mod tests {
         } else {
             false
         }
+    }
+}
+---server
+
+use anyhow::Result;
+use kv2::{MemTable, ProstServerStream, Service, ServiceInner};
+use tokio::net::TcpListener;
+use tracing::info;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    tracing_subscriber::fmt::init();
+    let addr = "127.0.0.1:9527";
+    let service: Service = ServiceInner::new(MemTable::new()).into();
+    let listener = TcpListener::bind(addr).await?;
+    info!("Start listening on {}", addr);
+    loop {
+        let (stream, addr) = listener.accept().await?;
+        info!("Client {:?} connected", addr);
+        let stream = ProstServerStream::new(stream, service.clone());
+        tokio::spawn(async move { stream.process().await });
     }
 }
 
