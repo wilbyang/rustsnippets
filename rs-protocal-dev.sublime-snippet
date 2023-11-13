@@ -389,6 +389,8 @@ bytes = "1" # 高效处理网络 buffer 的库
 flate2 = "1" # gzip 压缩
 prost = "0.8" # 处理 protobuf 的代码
 
+[build-dependencies]
+prost-build = "0.8" # 编译 protobuf
 ]]></content>
     <!-- Optional: Set a tabTrigger to define how to trigger the snippet -->
     <tabTrigger>rs-protocal-dev</tabTrigger>

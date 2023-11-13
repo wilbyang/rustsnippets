@@ -39,11 +39,82 @@ fn send_number(number: i32) -> Result<(), SystemError> {
 }
 
 fn main() {
-    println!("{}", parse_then_send(b"nine").unwrap_err()); # C
+    println!("{}", parse_then_send(b"nine").unwrap_err());
     println!("{}", parse_then_send(&[8, 9, 0, 200]).unwrap_err());
     println!("{}", parse_then_send(b"109080098").unwrap_err());
     println!("{}", SystemError::ColorError(8, 10, 200));
     parse_then_send(b"10098").unwrap();
+}
+
+
+---error handling and serde
+
+use std::io;
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+mod mod1;
+fn main() {
+
+    let x = test();
+    match x {
+        Ok(_) => {}
+        Err(DataStoreError::JSONError(e)) => {println!("JSONError: {}", e)}
+        Err(DataStoreError::Redaction(e)) => {println!("RedactionError: {}", e)}
+        _ => {}
+    }
+
+}
+fn test() -> Result<(), DataStoreError> {
+    // http get httpbin.org
+
+
+    println!("Hello, world!");
+    let my = MyStruct::new("John".to_string(), 32);
+    println!("my: {:?}", my);
+    let json = serde_json::to_string(&my)?;
+    let s = serde_json::from_str::<MyStruct>(&json)?;
+    println!("s: {:?}", s);
+    if s.name != "John2" {
+        return Err(DataStoreError::Redaction("name".to_string()));
+    }
+    Ok(())
+
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct MyStruct {
+    name: String,
+    age: u8,
+}
+
+impl MyStruct {
+    fn new(name: String, age: u8) -> Self {
+        Self {
+            name,
+            age,
+        }
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum DataStoreError {
+
+    #[error("data store disconnected")]
+    Disconnect(#[from] io::Error),
+    #[error("malformed json")]
+    JSONError(#[from] serde_json::Error),
+
+    #[error("the data for key `{0}` is not available")]
+    Redaction(String),
+
+    #[error("invalid header (expected {expected:?}, found {found:?})")]
+    InvalidHeader {
+        expected: String,
+        found: String,
+    },
+
+    #[error("unknown data store error")]
+    Unknown,
 }
 
 ]]></content>

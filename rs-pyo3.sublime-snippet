@@ -92,7 +92,7 @@ impl MyClass {
 
 ]]></content>
     <!-- Optional: Set a tabTrigger to define how to trigger the snippet -->
-    <tabTrigger>goarrays</tabTrigger>
+    <tabTrigger>ffi-py-node</tabTrigger>
     <!-- Optional: Set a scope to limit where the snippet will trigger -->
-    <scope>source.go</scope>
+    <scope>source.rust</scope>
 </snippet>
