@@ -89,6 +89,15 @@ fn blake3_base_hash(data: &[u8]) -> Hasher {
     hasher.update(data);
     hasher
 }
+
+--
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+anyhow = "1.0"
+rayon = "1.5"
+tokio-util = { version = "0.7", features = ["codec"] }
+futures = "0.3"
+blake3 = "1.5"
 ]]></content>
     <!-- Optional: Set a tabTrigger to define how to trigger the snippet -->
     <tabTrigger>rs-pow-tokio</tabTrigger>
